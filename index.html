@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Penyimpulan Multi-Dokumen</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Penyimpulan Berita Multi-Dokumen</h1>
+        </header>
+
+        <div class="card">
+            <div class="search-container">
+                <input type="text" id="keyword" placeholder="Masukkan kata kunci berita (Contoh: korupsi)...">
+                <button class="btn btn-primary" onclick="jalankanCari()">Cari Berita</button>
+            </div>
+            <div id="status" class="status-msg"></div>
+        </div>
+
+        <div id="section-daftar" class="card hidden">
+            <div class="card-header">
+                <h2>Berita Asli Ditemukan</h2>
+                <span class="badge" id="count-berita">0 Dokumen</span>
+            </div>
+
+            <div id="news-list" class="wadah-semua-berita"></div>
+
+            <button class="btn btn-success" onclick="jalankanRingkas()">
+                Mulai Proses Ringkasan
+            </button>
+        </div>
+
+        <div id="section-hasil" class="hidden">
+            <div id="section-graf" class="card hidden">
+    <h2>Visualisasi Graf Antar Kalimat</h2>
+    <img id="graf-img" src="" style="width:100%; border-radius:10px;">
+</div>
+            <div class="wadah-dua-ringkasan">
+
+                <div class="summary-card kartu-textrank">
+                    <div class="card-tag">Metode TextRank</div>
+                    <h3>Hasil Peringkasan TextRank</h3>
+
+                    <div class="graf-box">
+                        <h4>Representasi Graf TextRank</h4>
+                        <div id="graf-tr"></div>
+                    </div>
+
+                    <div id="result-tr" class="teks-hasil-ringkasan"></div>
+                </div>
+
+                <div class="summary-card kartu-lexrank">
+                    <div class="card-tag">Metode LexRank</div>
+                    <h3>Hasil Peringkasan LexRank</h3>
+
+                    <div class="graf-box">
+                        <h4>Representasi Graf LexRank</h4>
+                        <div id="graf-lr"></div>
+                    </div>
+
+                    <div id="result-lr" class="teks-hasil-ringkasan"></div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+<script>
+
+let contents = [];
+
+function setStatus(msg, type='') {
+    const s = document.getElementById('status');
+    s.innerText = msg;
+    s.className = 'status-msg ' + type;
+}
+
+async function jalankanCari() {
+
+    const kw = document.getElementById('keyword').value;
+
+    if(!kw){
+        alert("Masukkan kata kunci!");
+        return;
+    }
+
+    setStatus("Sedang mencari berita di database...", "loading");
+
+    document.getElementById('section-daftar').classList.add('hidden');
+    document.getElementById('section-hasil').classList.add('hidden');
+
+    const res = await fetch('/search', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({keyword:kw})
+    });
+
+    const d = await res.json();
+
+    if(d.success){
+
+        setStatus("");
+
+        contents = d.data.map(item => item.content);
+
+        document.getElementById('count-berita').innerText =
+            d.data.length + " Dokumen";
+
+        document.getElementById('news-list').innerHTML =
+            d.data.map(item => {
+
+                const tanggalRilis =
+                    item.released || '-';
+
+                const sumberBerita =
+                    item.source || 'Media Digital';
+
+                const linkPortal =
+                    item.url || '#';
+
+                return `
+                <div class="kartu-berita-asli">
+
+                    <h4>${item.title}</h4>
+
+                    <div class="info-sumber-tanggal">
+                        <span class="label-sumber">
+                            📊 Sumber:
+                            <strong>${sumberBerita}</strong>
+                        </span>
+
+                        <span class="label-tanggal">
+                            📅 Rilis:
+                            ${tanggalRilis}
+                        </span>
+                    </div>
+
+                    <div class="kotak-scroll-isi">
+                        ${item.content}
+                    </div>
+
+                    <div class="wadah-tombol-portal">
+                        <a href="${linkPortal}"
+                           target="_blank"
+                           class="tombol-ke-portal">
+                           Buka Berita Asli ↗
+                        </a>
+                    </div>
+
+                </div>
+                `;
+            }).join('');
+
+        document.getElementById('section-daftar')
+            .classList.remove('hidden');
+
+    } else {
+        setStatus(d.error, "error");
+    }
+}
+
+async function jalankanRingkas(){
+
+    const kw = document.getElementById('keyword').value;
+
+    setStatus("Algoritma sedang bekerja meringkas...", "loading");
+
+    const res = await fetch('/summarize', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+            berita: contents,
+            keyword: kw
+        })
+    });
+
+    const d = await res.json();
+
+    if(d.success){
+
+        setStatus("Proses ringkas selesai!", "success");
+
+        document.getElementById('result-tr').innerText =
+            d.textrank.ringkasan;
+
+        document.getElementById('result-lr').innerText =
+            d.lexrank.ringkasan;
+
+        document.getElementById('graf-tr').innerHTML =
+            d.textrank.graf;
+
+        document.getElementById('graf-lr').innerHTML =
+            d.lexrank.graf;
+
+        document.getElementById('section-hasil')
+            .classList.remove('hidden');
+        document.getElementById('graf-img').src =
+             d.graf + "?" + new Date().getTime();
+
+        document.getElementById('section-graf')
+            .classList.remove('hidden');
+
+        document.getElementById('section-hasil')
+            .scrollIntoView({behavior:'smooth'});
+
+    } else {
+
+        setStatus(d.error, "error");
+    }
+}
+
+</script>
+
+</body>
+</html>S
